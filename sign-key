@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+#
+####################################################################################
+#
+# sign-key
+# @author Patick O'Doherty p@trickod.com 0xE3371C093FEB6AF954D9AA7AF05E232B31FE4222
+# @version 0.0.1
+#
+# sign-key is a helper script for generating SSH certificates easily within a
+# "vault" QubesOS qube VM and passing it back to the source VM.
+#
+# SSH certificates are a feature allowing OpenSSH servers to accept public keys
+# and signed certificates belonging to a designated "Certificate Authority"
+# public key in place of the "Certificate Authority" key for authenticatiotn.
+#
+# This script presumes that you have a directory named "ssh-ca" in your $HOME
+# directory which contains SSH private keys for your Certificate Authority.
+# i.e. # $HOME/ssh-ca/work would be the "work" certificate authority key
+#
+# The "client"" parameter will be included in the Key ID portion of the
+# certificate and is intended to be used to easily identify the host with which
+# the certificate is associated e.g. "home-laptop". The full Key ID is of the
+# format: "$SSH_CA_NAME-$CLIENT_NAME-$SIGNING_DATE_UNIX_TIMESTAMP"
+#
+# By default all certificates have a lifetime of 365 days from date of creation.
+#
+####################################################################################
+key=$1
+if [ -z $key ]; then
+	echo "No key specified"
+	exit 1
+fi
+
+if [ ! -f $key ] ; then
+	echo "No key file found"
+	exit 1
+fi
+
+read -p "Client name (for certificate identifier): " identifier
+read -p "CA key: " ca_key
+if [ ! -f "/home/user/ssh-ca/${ca_key}" ] ; then
+	echo "No such SSH certificate key"
+	exit 1
+fi
+
+
+read -p "Certificate lifetime (default 365 days): " lifetime
+: ${lifetime:="+365d"}
+
+ssh-keygen -V $lifetime -s ssh-ca/$ca_key -I patrickod-${ca_key}-${identifier}-$(date "+%s") $key
+
+
+if [ ! $? -eq 0 ]; then
+	echo "Unable to sign key"
+	exit 1
+fi
+
+read -p "Destination VM: " dest_vm
+if [ -n $dest_vm ]; then
+	qvm-copy-to-vm $dest_vm ${key/.pub/-cert.pub}
+fi
